@@ -45,6 +45,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /opt/stock/bin/dwgread /usr/local/bin/dwgread
 COPY --from=build /opt/exact/bin/dwgread /usr/local/bin/dwgread-exact
+# dwgwrite is only here so the tests can write a DWG that holds chosen values (tests/test_json_exponents.py)
+COPY --from=build /opt/exact/bin/dwgwrite /usr/local/bin/dwgwrite-exact
 # The corresponding source of the GPL binaries travels with them, with the patch.
 COPY patches /usr/share/doc/pvec-oracle-libredwg/source/patches
 COPY --from=build /src/libredwg.tar.xz /usr/share/doc/pvec-oracle-libredwg/source/libredwg-${LIBREDWG_VERSION}.tar.xz
