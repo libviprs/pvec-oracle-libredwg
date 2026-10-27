@@ -55,7 +55,7 @@ def _magic(path):
 
 
 def run_dwgread(path):
-    """Decode a DWG to the JSON tree. Raises Failure with 11, 12 or 13 when it cannot."""
+    """Decode a DWG. Returns (JSON tree, decoder warnings). Raises Failure with 11, 12 or 13 when it cannot."""
     if not (os.path.isfile(path) and os.access(path, os.R_OK)):
         raise Failure(INPUT_UNREADABLE, "cannot read input")
     magic = _magic(path).decode("latin-1")
@@ -77,9 +77,16 @@ def run_dwgread(path):
             raise Failure(INPUT_MALFORMED, "dwgread: " + tail)
         try:
             with open(out, "r", encoding="utf-8") as f:
-                return json.load(f)
+                tree = json.load(f)
         except (ValueError, OSError) as e:
             raise Failure(INPUT_MALFORMED, "dwgread wrote JSON that does not parse: %s" % e)
+    # what the decoder says about what it skipped or could not read; SUCCESS and blank lines are not
+    warnings = []
+    for line in err.splitlines():
+        line = line.strip()
+        if line and line != "SUCCESS" and line not in warnings:
+            warnings.append("dwgread: " + line)
+    return tree, warnings
 
 
 def num(x):
@@ -95,8 +102,9 @@ def vec(v, n=3):
 class Drawing:
     """Handles resolved: block table, layer table, entity lists per block."""
 
-    def __init__(self, tree):
+    def __init__(self, tree, warnings=()):
         self.tree = tree
+        self.decoder_warnings = list(warnings)
         self.version = tree.get("FILEHEADER", {}).get("version")
         if not self.version:
             raise Failure(INPUT_MALFORMED, "no file header in the decoded tree")
@@ -150,4 +158,4 @@ class Drawing:
 
 
 def load(path):
-    return Drawing(run_dwgread(path))
+    return Drawing(*run_dwgread(path))

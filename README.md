@@ -35,7 +35,9 @@ Nothing is copied or imported across it, in either direction.
   from the published schemas and the file shapes (status record, read record, exit codes, the Part 21
   subset and the flattening rule), not from the other converter's code, which I did not read.
 - No GPL code goes the other way. Those repositories never build this one, never import it and never run
-  it as a library.
+  it as a library. pvec never starts this image, and no pvec crate links it: the corpus generation in the
+  fixtures repository runs it as a separate process, and pvec only ever sees the files in the bundle that
+  came out.
 
 The only thing that crosses is the container image and the files it writes. A consumer pulls the image
 by digest, starts it as a process with a bind-mounted scratch directory, and reads the output files. In

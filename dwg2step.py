@@ -46,6 +46,11 @@ PRODUCT_VERSION = "1 (LibreDWG %s+patch0001)" % lj.LIBREDWG_VERSION
 SCHEMA_ID = "AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF { 1 0 10303 442 1 1 4 }"
 TAU = 2.0 * math.pi
 MAX_DEPTH = 32
+# NP-19 of the PVec numeric policy refuses an affine map whose |ad - bc| <= REL * big^2, with a, b, c, d
+# the plane entries of the matrix and big the largest of them. REL is the policy's own constant
+# (constants.REL in pvec-numeric-policy.v1.json); this is a named copy, pinned to the policy file by
+# tests/test_near_singular.py, not a number of mine.
+NP19_REL = Fraction(1, 10 ** 10)
 
 # ---- exact helpers --------------------------------------------------------------------------
 
@@ -121,6 +126,13 @@ class Aff:
         return (A[0][0] * (A[1][1] * A[2][2] - A[1][2] * A[2][1])
                 - A[0][1] * (A[1][0] * A[2][2] - A[1][2] * A[2][0])
                 + A[0][2] * (A[1][0] * A[2][1] - A[1][1] * A[2][0]))
+
+
+def near_singular(m):
+    """NP-19 on the x/y entries of an exact matrix. Exact arithmetic, so no rounding decides it."""
+    a, b, c, d = m.A[0][0], m.A[0][1], m.A[1][0], m.A[1][1]
+    big = max(abs(a), abs(b), abs(c), abs(d))
+    return abs(a * d - b * c) <= NP19_REL * big * big
 
 
 def ocs_axes(normal):
@@ -346,7 +358,10 @@ def flatten(dwg, block, m, stack, curves, warnings):
             level = insert_affine(e, vec(dwg.blocks[name].get("base_pt", [0, 0, 0])))
             if level.det() == 0:
                 raise Failure(lj.CONVERSION_FAILED, "INSERT of %s has a singular matrix; no geometry is written for it" % name)
-            flatten(dwg, name, level if identity else m.then(level), stack + [block], curves, warnings)
+            total = level if identity else m.then(level)
+            if near_singular(total):
+                raise Failure(lj.CONVERSION_FAILED, "NEAR_SINGULAR_TRANSFORM: INSERT of %s maps the plane with |ad - bc| <= REL * big^2 (NP-19); no curve is written" % name)
+            flatten(dwg, name, total, stack + [block], curves, warnings)
             continue
         else:
             warnings.append("skipped %s (handle %d) in block %s" % (kind, e["handle"][2], block))
@@ -556,6 +571,7 @@ def main(argv):
         dwg = lj.load(src)
         if "*Model_Space" not in dwg.blocks:
             raise Failure(lj.INPUT_MALFORMED, "no model space block in the decoded drawing")
+        warnings.extend(dwg.decoder_warnings)
         curves = []
         flatten(dwg, "*Model_Space", None, [], curves, warnings)
         text = step_text(os.path.basename(src).rsplit(".", 1)[0], curves)

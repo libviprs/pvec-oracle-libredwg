@@ -34,7 +34,8 @@ grep -Eq '^ARG LIBREDWG_SHA256=[0-9a-f]{64}$' "$here/Dockerfile" \
   || { echo "publish.sh: the LibreDWG tarball in the Dockerfile is not pinned by sha256" >&2; exit 1; }
 
 # 2. A push comes from a clean tree, so the digest says what the repository says.
-if [ "$push" = yes ] && command -v git >/dev/null 2>&1 && [ -d "$here/.git" ]; then
+if [ "$push" = yes ] && command -v git >/dev/null 2>&1 \
+   && [ "$(git -C "$here" rev-parse --is-inside-work-tree 2>/dev/null)" = true ]; then
   [ -z "$(git -C "$here" status --porcelain)" ] \
     || { echo "publish.sh: the working tree is not clean" >&2; exit 1; }
 fi
@@ -43,7 +44,7 @@ meta="${TMPDIR:-/tmp}/pvec-oracle-libredwg-publish.$$.json"
 build="docker buildx build --platform $platforms --provenance=false --output type=image,name=$repo,push-by-digest=true,name-canonical=true,push=true --metadata-file $meta $here"
 
 if [ "$push" = no ]; then
-  echo "dry run: nothing is built or pushed"
+  echo "dry run, so no image is built and nothing leaves this machine"
   echo "would run: $build"
   echo "would then read containerimage.digest from $meta and verify both platforms with:"
   echo "  docker buildx imagetools inspect $repo@sha256:<digest>"
