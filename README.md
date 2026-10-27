@@ -11,7 +11,7 @@ Everything in this repository is GPL-3.0-or-later (the `LICENSE` file is the GPL
 - `Dockerfile` builds LibreDWG 0.14 from the release tarball on GNU's server, pinned by sha256, on a
   `debian:bookworm-slim` base pinned by digest.
 - `patches/0001-json-doubles-17-significant-digits.patch` is the only change I make to LibreDWG's
-  source: `dwgread -O JSON` prints every double with `%.14f`, which cannot carry a binary64 value, so
+  source (two hunks): `dwgread -O JSON` prints every double with `%.14f`, which cannot carry a binary64 value, so
   the patched build prints `%.17g`. The unmodified `dwgread` ships beside it as `dwgread`; the patched one is
   `dwgread-exact`. The numbers are in `docs/qualification.md`.
 - `dwg2step.py` reads a DWG through `dwgread-exact -O JSON`, flattens every INSERT chain and writes a small

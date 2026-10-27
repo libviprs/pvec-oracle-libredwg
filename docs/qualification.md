@@ -11,14 +11,14 @@ Nothing here ran under emulation.
 
 - Converter image: `Dockerfile` in this repository at the commit that added `dwg2step`, `dwgdump` and
   `publish.sh`. LibreDWG 0.14, Debian bookworm, Python 3.11.2. Image IDs: x64
-  `sha256:1042fc46ebb380edda421ff2291c2ab24995849ccb15060a40c35829def2b79b`, arm64 `4a9b9d087770`. Neither
-  was pushed anywhere, so there is no registry digest yet (see "Not measured").
+  `sha256:1042fc46ebb380edda421ff2291c2ab24995849ccb15060a40c35829def2b79b`, arm64 `4a9b9d087770` for the
+  first write-up; both were rebuilt after the review changes (see "After review") and neither was pushed anywhere, so there is no registry digest yet (see "Not measured").
 - Evaluator image: the Open CASCADE `step_eval` (OCCT 7.6.3) built from the fixtures repository's validator
   sources at commit f94f7f2 (`tests/build_step_eval.sh`), throw-away local tags, one per architecture.
 - Corpus: the 30 DWGs of corpus revision r0-open at that same commit, checked against its `SHA256SUMS`
   (`tests/fetch_corpus.sh`). The brief said 26; the revision holds 30 DWGs (and three more probes, shear,
   general affine and singular, that no DWG can carry and that have no file).
-- Suite: `tests/run.sh`, 46 tests.
+- Suite: `tests/run.sh`, 55 tests after the review changes (46 before).
 
 ## Inputs and pins
 
@@ -26,7 +26,7 @@ Nothing here ran under emulation.
 |---|---|
 | Base image | `debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587` (the multi-arch index) |
 | LibreDWG | release 0.14, `https://ftp.gnu.org/gnu/libredwg/libredwg-0.14.tar.xz`, sha256 `62ebb73b984f865960f20ed26619ea5f8789d5e3fd088fa40a2598384da81275` |
-| Patch | `patches/0001-json-doubles-17-significant-digits.patch`, one line in `src/out_json.c` |
+| Patch | `patches/0001-json-doubles-17-significant-digits.patch`, two hunks in `src/out_json.c` (see below) |
 
 I checked the tarball three ways before pinning it: the GNU server and the GitHub release asset give the
 same sha256, and the detached signature verifies against Reini Urban's key
@@ -48,26 +48,26 @@ So the image carries two binaries built from the same release source: `dwgread` 
 `dwgread-exact` (the patch: `%.17g`, which round-trips every binary64). The converters use the patched one.
 `tests/test_provenance.py::test_stock_json_loses_bits_the_patched_build_keeps` keeps the evidence in the
 suite. This is a deviation from "over `dwgread -O JSON`" in the issue only in that the JSON comes from a
-one-line patched build; the structure, key names and everything else are the stock output.
+patched build; the structure, key names and everything else are the stock output.
 
 ## Results per architecture
 
 | Check | native x64 (mars) | native arm64 (mercury) |
 |---|---|---|
 | Image builds from pinned inputs | yes | yes |
-| Suite (46 tests) | OK | OK |
-| `dwg2step` exit 0 on the 30 r0-open DWGs | 30 of 30, no warnings | 30 of 30, no warnings |
-| `step_eval` reads the output | 30 of 30, no `unsupported` entity | 30 of 30 |
+| Suite (55 tests) | OK | OK |
+| `dwg2step` on the 30 r0-open DWGs | 29 exit 0, `near-singular-001` refused with exit 15 (below) | same |
+| `step_eval` reads the output | 29 of 29, no `unsupported` entity | 29 of 29 |
 | `dwgdump` record equals the ACadSharp read record, field for field except `reader` | 30 of 30 | 30 of 30 |
-| Two consecutive runs | STEP byte for byte identical, 30 of 30 | same |
+| Two consecutive runs | STEP byte for byte identical, 29 of 29 | same |
 
-Across the two architectures: the 30 `secondary.step` files are byte for byte identical (sha256), the 30
+Across the two architectures: the 29 `secondary.step` files are byte for byte identical (sha256), the 30
 `read.libredwg.json` records are identical, and the 30 status records are identical except
 `wall_time_seconds`. The converter is Python over a C decoder compiled with `-ffp-contract=off`, and the
 exact rational arithmetic in the flattening does not depend on the platform.
 
 The evaluator is a different matter, and it is the evaluator's, not the converter's: running `step_eval`
-over those identical files on both architectures, 737 of 7308 reported reals differ. Every stored value
+over those identical files on both architectures (first run, all 30 files, before the refusal below), 737 of 7308 reported reals differ. Every stored value
 (poles, knots, weights, centres, radii) is bit for bit the same. The differences are derived values (sample
 points, tangents, curvatures, a line's end point, an ellipse's major axis): 531 of them within 2 ulp, the
 largest relative difference for values above 1e-3 is 3.8e-14 (a curvature of 146.2 at a sample of
@@ -137,11 +137,13 @@ for the policy to judge.
 - A circle under a transform that is a rotation times a uniform scale (decided from the INSERT's own scale
   components, never by comparing numbers) stays a circle with radius times the factor. Anything else
   becomes an ellipse, even when the plane happens to preserve the circle.
-- A singular instance (an exactly zero determinant) is refused with exit 15 and writes no geometry.
-  `near-singular-001` has a scale of 1e-12, which is not zero, so a line is written for it. The probe's
-  expected outcome is a rejection (no curve), so I expect the qualification stage to mark it
-  `UNEXPECTED_GEOMETRY` for this converter. A guard would need the policy's threshold for "near"; this
-  repository holds no threshold and I did not invent one.
+- A transform that NP-19 of the numeric policy calls singular is refused with exit 15 and writes no
+  geometry. The rule is `|ad - bc| <= REL * big^2` on the x/y entries of the composed matrix, evaluated in
+  exact arithmetic, with `REL` a named copy of the policy's `constants.REL` (1e-10) that a test pins to the
+  policy file. `near-singular-001` (scale 1e-12) is refused with `NEAR_SINGULAR_TRANSFORM` in the message,
+  which is the probe's expected outcome (no curve), so this converter and the other agree on it. The rule is
+  the policy's two-dimensional one; an INSERT that tilts its plane out of x/y could trip it on a drawing
+  where it should not, and no probe does that. An exactly singular matrix is refused as before.
 - Layer state has no STEP form: off and frozen layers are converted like any other (`layer-state-001`
   yields its three lines).
 - A periodic spline cannot go through OCCT as periodic. It is written as an unclamped B-spline of
@@ -153,6 +155,28 @@ for the policy to judge.
   and drops the last pole, which changes a stored value. I found this on the first x64 run of
   `closed-by-endpoint-001`, where the evaluator returned six poles for the authored seven.
 
+## After review
+
+The review of the first version asked for two fixes and some smaller ones, each with its red test first:
+
+- near-singular-001 is refused (above). My first version wrote a line and said it held no threshold; the
+  policy already had the rule.
+- The JSON patch had a second hole. `%.17g` prints exponents, and LibreDWG's `_VALUE_RD` strips trailing
+  zeros from any printed number containing a '.', so it cut into the exponent: 1.5e-10 came back as 0.15.
+  The corpus holds none of those values, which is why nothing was red. The patch now skips the strip when
+  the text has an exponent, and `tests/test_json_exponents.py` writes a DWG holding such values (with
+  `dwgwrite`, shipped in the image only for that) and reads it back bit for bit. Red before the fix.
+- Decoder warnings (the `TABLESTYLE` line on every AC1032 file, anything skipped) now reach the status
+  record's `warnings`; before, the field was always empty.
+- `publish.sh` checks for a clean tree inside a git worktree, and its dry-run text is reworded.
+
+Two things about the tests, for whoever reads the history: after the first red run I edited tests
+(`curve_probes` in `test_authored.py` was narrowed to single-entity probes, because a bulge arc's centre
+and radius are derived from vertices and bulge and are not stored values, and two bulge probes were added to
+the polyline-endpoint test; `run.sh` got a guard against reusing a work directory), and one of the 8 first
+failures was the test file's own literal em dash tripping its own check. Both are my doing and neither
+hides a failing converter.
+
 ## Determinism
 
 The STEP file is byte for byte identical across runs and across architectures, not only identical except
@@ -160,6 +184,10 @@ named fields. The one field a Part 21 file may vary (the `FILE_NAME` time stamp)
 unless `SOURCE_DATE_EPOCH` is set, and the status record's only varying field is `wall_time_seconds`.
 `PYTHONHASHSEED` is fixed in the image anyway; nothing in the converter iterates an unordered collection
 into the output.
+
+The decoder-warning line deserves a read: `dwgread: Warning: TODO TABLESTYLE r2010+ missing fields` now
+shows up in every status record. That is the decoder telling you it does not read all of that object, which
+is the visibility the plan asked for.
 
 ## Not measured
 
@@ -184,7 +212,7 @@ into the output.
 3. The status record's `converter` is the string `libredwg-dwg2step`. The schema in the fixtures repository
    still has `enum ["cadex","oda"]`; the plan has that generalised to a string id in its first work
    package, and until it is, this record does not validate against the old enum.
-4. The corpus has 30 DWGs, not 26.
+4. The corpus has 30 DWGs, not 26, and 29 of them are converted: `near-singular-001` is refused by design.
 5. The sanity tolerance (1e-9) in the tests for derived values, which is not the numeric policy.
 6. The test image uses the full `python3` package rather than `python3-minimal`, because `unittest` is not
    in the minimal one.
