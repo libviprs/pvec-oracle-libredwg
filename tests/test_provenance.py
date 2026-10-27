@@ -132,6 +132,7 @@ class Boundary(unittest.TestCase):
         for needle in ("GPL-3.0-or-later", "GNU LibreDWG", "files", "process", "digest"):
             self.assertIn(needle, t)
         self.assertRegex(t.lower(), r"nothing .*(copied|imported)")
+        self.assertIn("pvec never starts this image", t)
 
 
 if __name__ == "__main__":

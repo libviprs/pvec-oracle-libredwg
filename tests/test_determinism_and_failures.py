@@ -3,7 +3,7 @@ import json
 import os
 import unittest
 
-from common import convert, dwg, fixture_ids, load_json, run, scratch
+from common import convert, converted_ids as fixture_ids, dwg, load_json, run, scratch
 
 VARYING_STATUS_FIELDS = {"wall_time_seconds"}
 

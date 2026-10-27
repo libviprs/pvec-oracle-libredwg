@@ -21,6 +21,14 @@ def fixture_ids():
     return sorted(n for n in os.listdir(d) if os.path.isfile(os.path.join(d, n, "source.dwg")))
 
 
+# Probes whose expected outcome is "no curve": the converter must refuse them (exit 15).
+REFUSED = {"near-singular-001": 15}
+
+
+def converted_ids():
+    return [f for f in fixture_ids() if f not in REFUSED]
+
+
 def dwg(fid):
     return os.path.join(CORPUS, "fixtures", fid, "source.dwg")
 

@@ -61,6 +61,28 @@ class Publish(unittest.TestCase):
             self.assertEqual(r.stdout.strip().splitlines()[-1], "ghcr.io/libviprs/pvec-oracle-libredwg@sha256:" + "ab" * 32)
             self.assertTrue(any(c.startswith("buildx imagetools inspect ghcr.io/libviprs/pvec-oracle-libredwg@sha256:") for c in calls))
 
+    def test_the_clean_tree_check_also_works_in_a_worktree(self):
+        # in a git worktree .git is a file, not a directory
+        with scratch() as tmp:
+            tree = os.path.join(tmp, "tree")
+            os.makedirs(tree)
+            for name in ("publish.sh", "Dockerfile"):
+                open(os.path.join(tree, name), "w").write(open(os.path.join(REPO, name)).read())
+            open(os.path.join(tree, ".git"), "w").write("gitdir: /elsewhere\n")
+            bindir = os.path.join(tmp, "bin")
+            os.makedirs(bindir)
+            for name, body in (("git", "#!/bin/sh\ncase \"$*\" in *rev-parse*) echo true ;; *status*) echo ' M dwg2step.py' ;; esac\n"),
+                               ("docker", "#!/bin/sh\necho \"$@\" >> \"$FAKE_LOG\"\n")):
+                p = os.path.join(bindir, name)
+                open(p, "w").write(body)
+                os.chmod(p, 0o755)
+            log = os.path.join(tmp, "calls.log")
+            env = dict(os.environ, PATH=bindir + ":" + os.environ["PATH"], FAKE_LOG=log, TMPDIR=tmp)
+            r = subprocess.run(["sh", os.path.join(tree, "publish.sh"), "--push"], capture_output=True, text=True, env=env)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("not clean", r.stderr)
+            self.assertFalse(os.path.exists(log), "a build was started from a dirty tree")
+
     def test_bad_arguments_exit_10_and_run_nothing(self):
         with scratch() as tmp:
             r, calls = publish("--latest", tmp=tmp)

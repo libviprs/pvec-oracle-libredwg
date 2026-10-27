@@ -2,7 +2,7 @@
 import re
 import unittest
 
-from common import fixture_ids, out_path
+from common import converted_ids as fixture_ids, out_path
 
 ALLOWED = {
     "APPLICATION_CONTEXT", "APPLICATION_PROTOCOL_DEFINITION", "PRODUCT_CONTEXT", "PRODUCT",

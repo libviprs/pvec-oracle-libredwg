@@ -5,7 +5,7 @@ import os
 import re
 import unittest
 
-from common import dwg, fixture_ids, load_json, out_path, scratch, convert
+from common import converted_ids, dwg, fixture_ids, load_json, out_path, scratch, convert
 
 TOP = {"schema_version", "converter", "status", "exit_code", "input", "output", "product",
        "declared_schema", "wall_time_seconds", "warnings", "error"}
@@ -46,7 +46,7 @@ class StatusRecord(unittest.TestCase):
 
     def test_the_output_hash_in_the_record_is_the_hash_of_the_file(self):
         import hashlib
-        for fid in fixture_ids():
+        for fid in converted_ids():
             with self.subTest(fixture=fid):
                 s = load_json(out_path(fid, "secondary.status.json"))
                 self.assertEqual(hashlib.sha256(open(out_path(fid, "secondary.step"), "rb").read()).hexdigest(), s["output"]["sha256"])
@@ -57,6 +57,15 @@ class StatusRecord(unittest.TestCase):
             open(os.path.join(tmp, "x.dwg"), "wb").write(b"junk")
             convert(os.path.join(tmp, "x.dwg"), os.path.join(tmp, "x.step"), os.path.join(tmp, "x.status.json"))
             self.check(load_json(os.path.join(tmp, "x.status.json")))
+
+    def test_decoder_warnings_reach_the_status_record(self):
+        # LibreDWG says "TODO TABLESTYLE r2010+ missing fields" on every AC1032 file; a gap in the
+        # decoder has to be visible to whoever reads the record
+        for fid in fixture_ids():
+            with self.subTest(fixture=fid):
+                w = load_json(out_path(fid, "secondary.status.json"))["warnings"]
+                self.assertTrue(any("TABLESTYLE" in x for x in w), w)
+                self.assertFalse(any(x.strip() == "SUCCESS" for x in w))
 
     def test_the_default_status_name_sits_beside_the_output(self):
         with scratch() as tmp:
