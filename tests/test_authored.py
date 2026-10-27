@@ -37,10 +37,9 @@ def curve_probes():
         if fid in NOT_STORED:
             continue
         ex = expected(fid)["entities"]
-        if len(ex) >= 1 and all(e["structure"] == "CURVE_ONLY" for e in ex):
-            curves = [e for e in ex if e["class"] in STORED_CLASSES]
-            if len(curves) == 1:
-                yield fid, curves[0]
+        # a bulge arc is derived from a polyline's vertices and bulge, so it is not a stored value
+        if len(ex) == 1 and ex[0]["structure"] == "CURVE_ONLY" and ex[0]["class"] in STORED_CLASSES:
+            yield fid, ex[0]
 
 
 class StoredValues(unittest.TestCase):
@@ -86,7 +85,7 @@ class Edges(unittest.TestCase):
                 self.assertEqual(classes, sorted(["circular_arc"] * arcs + ["line"] * (segs - arcs)))
 
     def test_polyline_edges_pass_through_the_authored_vertices(self):
-        for fid in ("polyline-001", "large-coords-001", "lwpolyline-closed-001", "polyline2d-001"):
+        for fid in ("polyline-001", "large-coords-001", "lwpolyline-closed-001", "polyline2d-001", "bulge-arc-001", "bulge-arc-neg-001"):
             with self.subTest(fixture=fid):
                 ex = [e for e in expected(fid)["entities"] if e["class"] == "polyline"][0]
                 verts = [[scalar(c) for c in v] for v in ex["geometry"]["vertices"]]

@@ -50,7 +50,11 @@ COPY patches /usr/share/doc/pvec-oracle-libredwg/source/patches
 COPY --from=build /src/libredwg.tar.xz /usr/share/doc/pvec-oracle-libredwg/source/libredwg-${LIBREDWG_VERSION}.tar.xz
 COPY --from=build /src/libredwg/COPYING /usr/share/doc/pvec-oracle-libredwg/COPYING.libredwg
 COPY LICENSE /usr/share/doc/pvec-oracle-libredwg/COPYING
+COPY dwg2step.py dwgdump.py /usr/local/bin/
+COPY libredwg_json.py /usr/local/lib/pvec-oracle/libredwg_json.py
 ENV PYTHONPATH=/usr/local/lib/pvec-oracle PYTHONDONTWRITEBYTECODE=1 PYTHONHASHSEED=0 \
     LIBREDWG_VERSION=${LIBREDWG_VERSION}
+RUN chmod 0755 /usr/local/bin/dwg2step.py /usr/local/bin/dwgdump.py \
+    && ln -s dwg2step.py /usr/local/bin/dwg2step && ln -s dwgdump.py /usr/local/bin/dwgdump
 WORKDIR /work
 ENTRYPOINT []

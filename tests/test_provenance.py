@@ -83,7 +83,7 @@ class NothingIsCopied(unittest.TestCase):
                 continue
             for w in words:
                 self.assertNotIn(w.lower(), t.lower(), "%s mentions %s" % (rel, w))
-            self.assertNotIn("—", t, "%s has an em dash" % rel)
+            self.assertNotIn(chr(0x2014), t, "%s has an em dash" % rel)
 
 
 class Pinned(unittest.TestCase):

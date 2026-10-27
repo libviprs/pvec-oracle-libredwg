@@ -18,6 +18,9 @@ work=${5:?work directory}
 # REPO_MOUNT may be a named volume (a docker host that cannot see this directory, such as a VM).
 repo=${REPO_MOUNT:-$(cd "$(dirname "$0")/.." && pwd)}
 case $work in */*) mkdir -p "$work" ;; esac
+# A work directory is used once: stale outputs from an earlier run would let a failing converter pass.
+docker run --rm --platform "$platform" -v "$work:/work:ro" "$image" sh -c '[ ! -e /work/out ]' \
+  || { echo "run.sh: $work already holds outputs; give it a new, empty work directory" >&2; exit 1; }
 
 docker run --rm --platform "$platform" -v "$corpus:/corpus:ro" -v "$work:/work" "$image" sh -c '
   for d in /corpus/fixtures/*/; do
