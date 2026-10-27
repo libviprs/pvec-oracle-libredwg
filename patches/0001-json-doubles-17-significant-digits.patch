@@ -1,0 +1,23 @@
+Subject: JSON output: write doubles with 17 significant digits
+
+GNU LibreDWG 0.14 writes every double in `dwgread -O JSON` with "%.14f" (src/out_json.c,
+FORMAT_RD). That is 14 digits after the decimal point, so a value such as pi/2 comes out as
+1.5707963267949 and 1e-20 comes out as 0. The DWG itself stores the full 64 bits and the decoder
+returns them, so the loss happens only when the JSON is printed.
+
+"%.17g" is enough to round-trip any binary64 value, and it is still plain JSON. This is the only
+change: the structure, the key names and everything else are the stock output.
+
+This file is covered by the same licence as LibreDWG (GPL-3.0-or-later).
+
+--- a/src/out_json.c	2026-10-26 23:42:43
++++ b/src/out_json.c	2026-10-26 23:42:44
+@@ -139,7 +139,7 @@
+ #undef FORMAT_4BITS
+ #undef FORMAT_RD
+ #undef FORMAT_BD
+-#define FORMAT_RD "%.14f"
++#define FORMAT_RD "%.17g"
+ #define FORMAT_BD FORMAT_RD
+ #define FORMAT_RLL "%" PRIu64
+ #define FORMAT_BLL "%" PRIu64
