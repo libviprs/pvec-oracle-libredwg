@@ -5,13 +5,16 @@ FORMAT_RD). That is 14 digits after the decimal point, so a value such as pi/2 c
 1.5707963267949 and 1e-20 comes out as 0. The DWG itself stores the full 64 bits and the decoder
 returns them, so the loss happens only when the JSON is printed.
 
-"%.17g" is enough to round-trip any binary64 value, and it is still plain JSON. This is the only
-change: the structure, the key names and everything else are the stock output.
+"%.17g" is enough to round-trip any binary64 value, and it is still plain JSON. The second hunk is
+needed because of it: the JSON writer's _VALUE_RD strips trailing '0' characters from any printed number
+that contains a '.', which was harmless with "%.14f" and, with "%.17g", cuts into an exponent (1.5e-10
+would print as 1.5e-1). The strip is skipped when the text has an exponent. Nothing else changes: the
+structure, the key names and everything else are the stock output.
 
 This file is covered by the same licence as LibreDWG (GPL-3.0-or-later).
 
 --- a/src/out_json.c	2026-10-26 23:42:43
-+++ b/src/out_json.c	2026-10-26 23:42:44
++++ b/src/out_json.c	2026-10-27 00:23:39
 @@ -139,7 +139,7 @@
  #undef FORMAT_4BITS
  #undef FORMAT_RD
@@ -21,3 +24,13 @@ This file is covered by the same licence as LibreDWG (GPL-3.0-or-later).
  #define FORMAT_BD FORMAT_RD
  #define FORMAT_RLL "%" PRIu64
  #define FORMAT_BLL "%" PRIu64
+@@ -186,7 +186,8 @@
+     size_t k;                                                                 \
+     snprintf (_buf, 255, FORMAT_RD, value);                                   \
+     k = strlen (_buf);                                                        \
+-    if (k > 0 && strrchr (_buf, '.') && _buf[k - 1] == '0')                   \
++    if (k > 0 && strrchr (_buf, '.') && !strchr (_buf, 'e')                 \
++        && _buf[k - 1] == '0')                                                \
+       {                                                                       \
+         for (k--; k > 1 && _buf[k - 1] != '.' && _buf[k] == '0'; k--)         \
+           _buf[k] = '\0';                                                     \
