@@ -138,9 +138,24 @@ class Drawing:
             raise Failure(CONVERSION_FAILED, "INSERT points at no block")
         return o["name"]
 
+    def chain(self, first, last, stop_at=None):
+        """R2000 has no entity arrays: a block header names its first and last entity and every entity names the next
+        one. Follows next_entity from first, and gives up at a null link, at last, or on a loop."""
+        out, seen = [], set()
+        o = self.ref(first)
+        while o is not None and o["handle"][2] not in seen:
+            seen.add(o["handle"][2])
+            out.append(o)
+            if last and o["handle"][2] == last[3]:
+                break
+            o = self.ref(o.get("next_entity"))
+        return out
+
     def entities(self, block_name):
         """Entities of one block in the order the block lists them."""
         hdr = self.blocks[block_name]
+        if "entities" not in hdr and "first_entity" in hdr:
+            return self.chain(hdr["first_entity"], hdr.get("last_entity"))
         out = []
         for r in hdr.get("entities", []):
             o = self.ref(r)
@@ -149,6 +164,8 @@ class Drawing:
         return out
 
     def vertices_2d(self, polyline):
+        if "vertex" not in polyline and "first_vertex" in polyline:
+            return [o for o in self.chain(polyline["first_vertex"], polyline.get("last_vertex")) if o.get("entity") == "VERTEX_2D"]
         out = []
         for r in polyline.get("vertex", []):
             o = self.ref(r)
