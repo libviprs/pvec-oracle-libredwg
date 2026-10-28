@@ -248,7 +248,8 @@ def from_spline(e):
     rational = bool(int(e.get("rational", 0)))
     weights = [float(p.get("w", 1.0)) for p in pts] if rational else None
     n = len(poles)
-    if bool(int(e.get("periodic", 0))) and len(knots) == n + 1:
+    wrapped = bool(int(e.get("periodic", 0))) and len(knots) == n + 1
+    if wrapped:
         # A periodic spline stores the unique poles and one knot per pole plus one. STEP via OCCT
         # reads it as non-periodic, so the wrap is written out: n + deg poles (copies of the unique
         # ones) and the knot vector continued by the period on both sides. Only the continued
@@ -263,15 +264,16 @@ def from_spline(e):
                 ext.append(knots[i])
             else:
                 ext.append(to_f(fr(knots[i - n]) + period))
-        # pole j of the written curve is influenced by knots j-deg .. j+1 of the periodic vector, so
-        # it is unique pole (j - deg) mod n
-        order = [(j - deg) % n for j in range(n + deg)]
+        # pvec's wrap convention (BSpline::from_periodic, ADR 0011), the one the authored records and the
+        # other converter follow: unique pole i is influenced by the periodic knots i - deg .. i + 1, so
+        # the written poles are the unique ones in order with the first deg repeated at the end
+        order = [j % n for j in range(n + deg)]
         poles = [poles[i] for i in order]
         weights = [weights[i] for i in order] if weights is not None else None
         knots = ext
     if len(knots) != len(poles) + deg + 1:
         raise Failure(lj.CONVERSION_FAILED, "SPLINE knot count %d does not fit %d poles of degree %d" % (len(knots), len(poles), deg))
-    return {"t": "spline", "degree": deg, "poles": poles, "weights": weights, "knots": knots}
+    return {"t": "spline", "degree": deg, "poles": poles, "weights": weights, "knots": knots, "closed": wrapped}
 
 
 # ---- transforms of curves ------------------------------------------------------------------
@@ -450,10 +452,11 @@ class Writer:
         pts = [self.point(p) for p in c["poles"]]
         plist = "(" + ",".join("#%d" % i for i in pts) + ")"
         ks, ms = runs(c["knots"])
-        # closed_curve stays .F. even when the first and last pole are the same point: with .T. the
-        # OCCT reader makes the curve periodic and drops the last pole, which would change a stored
-        # value. Closure by endpoint is a property of the poles, and the evaluator reads it there.
-        closed = ".F."
+        # closed_curve is .T. only for a wrapped periodic spline, where the OCCT reader makes the curve
+        # periodic and drops the repeated poles, giving back the unique ones. It stays .F. when the first
+        # and last pole merely coincide: there .T. would drop the last pole and change a stored value.
+        # Closure by endpoint is a property of the poles, and the evaluator reads it there.
+        closed = ".T." if c.get("closed") else ".F."
         klist = "(" + ",".join(str(m) for m in ms) + "),(" + ",".join(real(k) for k in ks) + ")"
         if c["weights"] is None:
             i = self.add("B_SPLINE_CURVE_WITH_KNOTS('',%d,%s,.UNSPECIFIED.,%s,.F.,%s,.UNSPECIFIED.)" % (c["degree"], plist, closed, klist))

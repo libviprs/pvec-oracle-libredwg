@@ -18,7 +18,7 @@ Nothing here ran under emulation.
 - Corpus: the 30 DWGs of corpus revision r0-open at that same commit, checked against its `SHA256SUMS`
   (`tests/fetch_corpus.sh`). The brief said 26; the revision holds 30 DWGs (and three more probes, shear,
   general affine and singular, that no DWG can carry and that have no file).
-- Suite: `tests/run.sh`, 55 tests after the review changes (46 before).
+- Suite: `tests/run.sh`, 56 tests after the later fixes (55 after the review changes, 46 before).
 
 ## Inputs and pins
 
@@ -146,12 +146,12 @@ for the policy to judge.
   where it should not, and no probe does that. An exactly singular matrix is refused as before.
 - Layer state has no STEP form: off and frozen layers are converted like any other (`layer-state-001`
   yields its three lines).
-- A periodic spline cannot go through OCCT as periodic. It is written as an unclamped B-spline of
-  n + degree poles (copies of the unique poles, in the order the continued knot vector needs) with the
-  knot vector continued by the period, so its parameter domain is the authored one and it closes
-  geometrically, not by equal end poles. I expect `closed-periodic-001` to classify as
-  `GEOMETRIC_EXACT_REPARAMETERIZED` at best, as the plan says.
-- `closed_curve` is always `.F.` in a B-spline. With `.T.` the OCCT 7.6.3 reader builds a periodic curve
+- A periodic spline is written wrapped: n + degree poles (the unique poles in order, the first `degree` repeated
+  at the end) with the knot vector continued by the period, so its parameter domain is the authored one. That
+  is pvec's convention (`BSpline::from_periodic`, ADR 0011): unique pole i is influenced by the periodic knots
+  i - degree .. i + 1. It is the only B-spline written with `closed_curve` `.T.`, so the OCCT reader makes it
+  periodic and drops the repeats, and the evaluator returns the authored unique poles.
+- Every other B-spline gets `.F.`. With `.T.` on a clamped curve the OCCT 7.6.3 reader builds a periodic curve
   and drops the last pole, which changes a stored value. I found this on the first x64 run of
   `closed-by-endpoint-001`, where the evaluator returned six poles for the authored seven.
 
@@ -216,3 +216,13 @@ is the visibility the plan asked for.
 5. The sanity tolerance (1e-9) in the tests for derived values, which is not the numeric policy.
 6. The test image uses the full `python3` package rather than `python3-minimal`, because `unittest` is not
    in the minimal one.
+
+## Periodic spline wrap order (found in the gold-fixtures qualification)
+
+The first two-column qualification put `closed-periodic-001` at `BOUNDED_APPROXIMATION` for this converter
+against `STRUCTURAL_EXACT` for the other one, a deviation of 0.092 on a curve of radius 3. I had assigned unique
+pole i to the periodic knots i .. i + 1 + degree, the textbook reading, while pvec and the authored record assign
+it i - degree .. i + 1, so my curve was the same poles on a rotated basis. I also wrote `closed_curve` `.F.`, so
+the evaluator saw nine poles instead of the six authored. Red tests first (the stored-values test no longer
+skips the probe, the evaluator must report it periodic, and the Cox-de Boor check uses pvec's order), then the
+fix above. The decoded numbers were never the problem: `dwgdump` still equals the other reader field for field.
