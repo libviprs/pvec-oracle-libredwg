@@ -242,7 +242,7 @@ def from_spline(e):
     pts = e.get("ctrl_pts", [])
     knots = [float(k) for k in e.get("knots", [])]
     if not pts or not knots:
-        raise Failure(lj.CONVERSION_FAILED, "SPLINE without control points and knots (fit-point spline)")
+        raise Failure(lj.CONVERSION_FAILED, "SPLINE without control points and knots")
     deg = int(e["degree"])
     poles = [(float(p["x"]), float(p["y"]), float(p["z"])) for p in pts]
     rational = bool(int(e.get("rational", 0)))
@@ -352,6 +352,11 @@ def flatten(dwg, block, m, stack, curves, warnings):
             out = from_polyline(frame, [(v["point"][0], v["point"][1]) for v in vs], [v.get("bulge", 0.0) for v in vs],
                                 bool(int(e.get("flag", 0)) & 1), float(e.get("elevation", 0.0)))
         elif kind == "SPLINE":
+            if e.get("fit_pts") and not e.get("ctrl_pts"):
+                # Fit points alone do not fix a B-spline (the tangents and the fitting method do), so this entity
+                # is left out and named, and the rest of the drawing converts.
+                warnings.append("skipped SPLINE (handle %d) in block %s: fit points only, no control points" % (e["handle"][2], block))
+                continue
             out = [from_spline(e)]
         elif kind == "INSERT":
             name = dwg.block_name(e)
@@ -467,7 +472,30 @@ class Writer:
         self.curve_ids.append(i)
 
 
-def step_text(name, curves):
+# DWG INSUNITS values this converter writes. The metric ones the STEP context can name are declared and the stored
+# values are left alone. Inches and feet have no SI prefix, so they are scaled to metre by their definition (exact
+# rationals, one rounding per written number) and declared metre.
+DECLARED_UNITS = {6: "$,.METRE.", 4: ".MILLI.,.METRE.", 5: ".CENTI.,.METRE.", 7: ".KILO.,.METRE."}
+TO_METRE = {1: ("inches", Fraction(254, 10000)), 2: ("feet", Fraction(3048, 10000))}
+
+
+def length_unit(dwg, warnings):
+    """(the SI_UNIT arguments for the context, the root affine that scales to metre or None)."""
+    n = int(dwg.tree.get("HEADER", {}).get("INSUNITS", 0))
+    if n in DECLARED_UNITS:
+        return DECLARED_UNITS[n], None
+    if n == 0:
+        warnings.append("INSUNITS is unitless: values are written unscaled and labelled metre")
+        return "$,.METRE.", None
+    if n in TO_METRE:
+        name, s = TO_METRE[n]
+        warnings.append("INSUNITS is %s: every length scaled by %s to metre and declared metre" % (name, float(s)))
+        z, o = Fraction(0), s
+        return "$,.METRE.", Aff([[o, z, z], [z, o, z], [z, z, o]], (z, z, z), s, 1)
+    raise Failure(lj.CONVERSION_FAILED, "drawing unit %d is not supported (metre, millimetre, centimetre, kilometre, inches, feet and unitless are)" % n)
+
+
+def step_text(name, curves, unit="$,.METRE."):
     w = Writer()
     for c in curves:
         w.curve(c)
@@ -499,7 +527,7 @@ def step_text(name, curves):
         "#30=(GEOMETRIC_REPRESENTATION_CONTEXT(3)GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((#31))GLOBAL_UNIT_ASSIGNED_CONTEXT((#32,#33,#34))"
         "REPRESENTATION_CONTEXT('Context3D','3D Context with UNIT and UNCERTAINTY'));",
         "#31=UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE(1.E-07),#32,'distance_accuracy_value','confusion accuracy');",
-        "#32=(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT($,.METRE.));",
+        "#32=(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(%s));" % unit,
         "#33=(NAMED_UNIT(*)PLANE_ANGLE_UNIT()SI_UNIT($,.RADIAN.));",
         "#34=(NAMED_UNIT(*)SI_UNIT($,.STERADIAN.)SOLID_ANGLE_UNIT());",
     ]
@@ -576,8 +604,9 @@ def main(argv):
             raise Failure(lj.INPUT_MALFORMED, "no model space block in the decoded drawing")
         warnings.extend(dwg.decoder_warnings)
         curves = []
-        flatten(dwg, "*Model_Space", None, [], curves, warnings)
-        text = step_text(os.path.basename(src).rsplit(".", 1)[0], curves)
+        unit, root = length_unit(dwg, warnings)
+        flatten(dwg, "*Model_Space", root, [], curves, warnings)
+        text = step_text(os.path.basename(src).rsplit(".", 1)[0], curves, unit)
         declared = declared_schema(text)
         if not declared or "AP242" not in declared.upper():
             raise Failure(lj.SCHEMA_NOT_AP242, "declared schema is %s" % declared)

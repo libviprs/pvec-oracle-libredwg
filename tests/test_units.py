@@ -33,13 +33,19 @@ def with_units(tmp, insunits):
     return made
 
 
+def read(path):
+    if not os.path.exists(path):
+        return None
+    with open(path) as f:
+        return f.read()
+
+
 def convert_units(insunits):
     """(exit code, STEP text or None, status record) for line-001 with the given INSUNITS."""
     with scratch() as tmp:
         out, st = os.path.join(tmp, "o.step"), os.path.join(tmp, "o.json")
         r = convert(with_units(tmp, insunits), out, st)
-        text = open(out).read() if os.path.exists(out) else None
-        return r.returncode, text, json.load(open(st))
+        return r.returncode, read(out), load_json(st)
 
 
 def points(text):
@@ -113,7 +119,7 @@ class RealWorld(unittest.TestCase):
         with scratch() as tmp:
             out, st = os.path.join(tmp, "o.step"), os.path.join(tmp, "o.json")
             r = convert(os.path.join(REALWORLD, fid, "source.dwg"), out, st)
-            return r.returncode, (open(out).read() if os.path.exists(out) else None), json.load(open(st))
+            return r.returncode, read(out), load_json(st)
 
     def test_a_fit_point_only_spline_is_skipped_for_that_entity_and_the_rest_converts(self):
         code, text, st = self.run_on("general-sample-ac1032-001")
