@@ -30,7 +30,7 @@ def header(name, first, last):
 
 class Chains(unittest.TestCase):
     def test_entities_follow_next_entity_from_first_entity(self):
-        objs = [header("*Model_Space", 80, 82),
+        objs = [header("*Model_Space", 80, 81),
                 obj("LINE", 80, next_entity=href(4, 82)),
                 obj("CIRCLE", 82, next_entity=href(4, 81)),
                 obj("ARC", 81, next_entity=href(4, 0)),
