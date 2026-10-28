@@ -10,9 +10,9 @@ from common import SANITY, close, expected, fixture_ids, scalar, verification
 
 STORED_CLASSES = {"circle", "circular_arc", "ellipse", "elliptical_arc", "bezier", "bspline", "nurbs"}
 STORED_KEYS = ("center", "radius", "degree", "control_points", "knots", "weights")
-# A periodic spline is written with its wrap spelled out, so its poles repeat; it is judged as a
-# reparameterised curve downstream, and test_the_periodic_spline_is_the_same_point_set covers it.
-NOT_STORED = {"closed-periodic-001"}
+# Every probe's stored values come back bit for bit, the periodic spline included: it is written wrapped
+# and closed, and the evaluator unwraps it to the authored unique poles (test_the_periodic_spline_*).
+NOT_STORED = set()
 
 
 def flat(x):
@@ -145,6 +145,10 @@ class FlattenedInstances(unittest.TestCase):
             for a, b in zip(got_p, w):
                 self.assertTrue(close(scalar(a), scalar(b), scalar(b)))
 
+    def test_the_periodic_spline_comes_back_periodic_with_the_authored_poles(self):
+        e = verification("closed-periodic-001")["entities"][0]
+        self.assertEqual(e["closure"], {"closed_by_endpoint": False, "closed_by_knots": True, "periodic": True})
+
     def test_the_periodic_spline_is_the_same_point_set(self):
         # closed-periodic-001: six unique poles. The first and last sample must coincide (a closed
         # curve) and every sample must lie on the authored cubic B-spline, evaluated here from the
@@ -177,8 +181,10 @@ class FlattenedInstances(unittest.TestCase):
             # the parameter domain of the written curve is the authored one, shifted by nothing
             t = lo + (u - scalar(e["parameter_domain"]["start"]))
             want = [0.0, 0.0, 0.0]
+            # pvec's convention (BSpline::from_periodic, ADR 0011): unique pole i is supported by the
+            # periodic knots i - deg .. i + 1, so the first pole is the one at the seam
             for i in range(-deg, n + deg):
-                b = basis(i, deg, t)
+                b = basis(i - deg, deg, t)
                 for k in range(3):
                     want[k] += b * poles[i % n][k]
             for k in range(3):
