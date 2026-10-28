@@ -117,8 +117,14 @@ The limits of that statement, because "nothing it needed" is easy to over-read:
 
 - All 30 files come from one writer (acadrust, AC1032). I had no DWG written by AutoCAD or another
   vendor tool, so I have shown that LibreDWG reads this writer's AC1032, not AC1032 in general.
-- Fit-point splines (scenario 2, no control points) exit 15: no probe has one, and I do not convert fit
-  points to poles.
+- A fit-point spline (scenario 2, no control points) is left out for that entity, with a `skipped SPLINE ... fit points
+  only` warning, and the rest of the drawing converts: fit points alone do not fix a B-spline, so I do not turn them into
+  poles. No probe has one; `general-sample-ac1032-001` from the real-world set has one (`tests/test_units.py`, with
+  `REALWORLD` pointing at that set).
+- Drawing units come from `HEADER.INSUNITS`: metre, millimetre, centimetre and kilometre are declared in the STEP context
+  and the stored values are left alone; inches and feet are scaled to metre (0.0254 and 0.3048, exact rationals, one
+  rounding per written number) and declared metre, with a warning; unitless is written as metre with a warning; any other
+  unit exits 15 and names the value. Before this the converter labelled every drawing metre, whatever it held.
 - Entity types outside the eight in the record are not converted: `dwg2step` lists each skipped entity in
   the status record's `warnings`, and `dwgdump` marks it `"unread": true`. No probe has one, so neither
   path has been exercised on a drawing.
